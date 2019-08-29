@@ -15,17 +15,19 @@ func init() {
 type Builder struct {
 }
 
-func (k *Builder) Build(target resolver.Target, cc resolver.ClientConn, opts resolver.BuildOption) (r resolver.Resolver, err error) {
+func (k *Builder) Build(target resolver.Target, cc resolver.ClientConn, opts resolver.BuildOption) (resolver.Resolver, error) {
+	var err error
 	var client *Client
 	if client, err = GetClient(); err != nil {
-		return
+		return nil, err
 	}
 	var tgt Target
 	if tgt, err = ResolveTarget(target.Authority, target.Endpoint, client.GetNamespace()); err != nil {
-		return
+		return nil, err
 	}
-	r = NewResolver(tgt, cc, opts, client)
-	return
+	r := NewResolver(tgt, cc, opts, client)
+	r.Start()
+	return r, nil
 }
 
 func (k *Builder) Scheme() string {
