@@ -13,3 +13,7 @@
 
 # Goland
 .idea/
+
+# Binary
+/k8sresolvertestclient/k8sresolvertestclient
+/k8sresolvertestserver/k8sresolvertestserver

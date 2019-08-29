@@ -2,8 +2,8 @@ package k8sresolver
 
 import (
 	"context"
+	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc/resolver"
-	"log"
 	"time"
 )
 
@@ -59,26 +59,31 @@ func (r *Resolver) run(ctx context.Context) {
 		select {
 		case addrs := <-vals:
 			// on addresses updated
+			log.Debug().Strs("addrs", addrs).Msg("k8s resolver watch result received")
 			r.updateAddresses(addrs)
 		case err := <-errs:
 			// on error occurred
-			log.Printf("WatchAddresses Error: %s", err.Error())
+			log.Error().Err(err).Msg("k8s resolver watch failed")
 		case <-tk.C:
 			// on ticked
+			log.Debug().Msg("k8s resolver timer ticked")
 			r.resolves <- nil
 			continue
 		case <-r.resolves:
 			// on resolve requested
 			// de-duplicate requests
 			if time.Since(lastResolved) < time.Second*5 {
+				log.Debug().Msg("k8s resolver update request discarded")
 				continue
 			}
 			lastResolved = time.Now()
+			log.Debug().Msg("k8s resolver update request received")
 			// resolve
 			if addrs, err := r.client.GetAddresses(ctx, r.target); err != nil {
-				log.Printf("GetAddresses Error: %s", err.Error())
+				log.Error().Err(err).Msg("k8s resolver update request failed")
 				continue
 			} else {
+				log.Debug().Strs("addrs", addrs).Msg("k8s resolver update request succeeded")
 				r.updateAddresses(addrs)
 			}
 		case <-ctx.Done():
@@ -101,7 +106,7 @@ func (r *Resolver) resolveNow() {
 }
 
 func (r *Resolver) ResolveNow(opt resolver.ResolveNowOption) {
-	log.Printf("ResolveNow() called: %#v", opt)
+	log.Debug().Interface("opt", opt).Msg("gRPC asked for resolving now")
 	go r.resolveNow()
 }
 

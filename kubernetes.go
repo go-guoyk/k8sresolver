@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/ericchiang/k8s"
 	v1 "github.com/ericchiang/k8s/apis/core/v1"
-	"log"
+	"github.com/rs/zerolog/log"
 	"net"
 	"sort"
 	"strconv"
@@ -120,12 +120,11 @@ func (c *Client) watchAddresses(ctx context.Context, target Target, output chan 
 		if event, err = watcher.Next(ep); err != nil {
 			return
 		}
-		log.Printf("Event: %s, %#v", event, ep)
+		log.Debug().Str("event", event).Interface("endpoints", ep.Subsets).Msg("k8s client event received")
 		var addrs []string
 		if addrs, err = endpointsToAddresses(*ep, target); err != nil {
 			return
 		}
-		log.Printf("Addresses: %#v", addrs)
 		output <- addrs
 	}
 }
