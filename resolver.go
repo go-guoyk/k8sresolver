@@ -7,6 +7,11 @@ import (
 	"time"
 )
 
+var (
+	// RefreshInterval adjective refresh interval
+	RefreshInterval = time.Minute
+)
+
 type Resolver struct {
 	target Target
 	conn   resolver.ClientConn
@@ -15,16 +20,17 @@ type Resolver struct {
 
 	cancel   context.CancelFunc
 	resolves chan interface{}
+	results  chan []string
 }
 
 func NewResolver(target Target, cc resolver.ClientConn, opts resolver.BuildOption, client *Client) *Resolver {
 	r := &Resolver{
-		target: target,
-		conn:   cc,
-		opt:    opts,
-		client: client,
-
+		target:   target,
+		conn:     cc,
+		opt:      opts,
+		client:   client,
 		resolves: make(chan interface{}, 1),
+		results:  make(chan []string, 1),
 	}
 	return r
 }
@@ -38,54 +44,66 @@ func (r *Resolver) Start() {
 	go r.run(ctx)
 }
 
-func (r *Resolver) run(ctx context.Context) {
-	vals := make(chan []string, 1)
-	errs := make(chan error, 1)
-
-	// watch
-	go r.client.WatchAddress(ctx, r.target, vals, errs)
-
-	// periodically update addresses
-	tk := time.NewTicker(time.Second * 30)
+func (r *Resolver) runPeriodicResolve(ctx context.Context) {
+	// periodical adjective resolves
+	tk := time.NewTicker(RefreshInterval)
 	defer tk.Stop()
 
+	go func() {
+		for {
+			select {
+			case <-tk.C:
+				log.Debug().Msg("k8s resolver: timer ticked")
+				r.resolveNow()
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+}
+
+func (r *Resolver) runResolveExecutor(ctx context.Context) {
+	debounce(ctx, time.Second*3, r.resolves, func() {
+		if addrs, err := r.client.GetAddresses(ctx, r.target); err != nil {
+			log.Error().Err(err).Msg("k8s resolver: update request failed")
+			return
+		} else {
+			log.Debug().Strs("addrs", addrs).Msg("k8s resolver: update request succeeded")
+			r.results <- addrs
+		}
+	})
+}
+
+func (r *Resolver) runWatch(ctx context.Context) {
+	r.client.WatchAddress(ctx, r.target, r.results)
+}
+
+func (r *Resolver) run(ctx context.Context) {
+	go r.runPeriodicResolve(ctx)
+	go r.runResolveExecutor(ctx)
+	go r.runWatch(ctx)
+
 	// initial resolve
-	r.resolves <- nil
+	r.resolveNow()
 
-	// last time resolved
-	var lastResolved time.Time
-
+	// apply
+	var last []string
 	for {
 		select {
-		case addrs := <-vals:
-			// on addresses updated
-			log.Debug().Strs("addrs", addrs).Msg("k8s resolver watch result received")
-			r.updateAddresses(addrs)
-		case err := <-errs:
-			// on error occurred
-			log.Error().Err(err).Msg("k8s resolver watch failed")
-		case <-tk.C:
-			// on ticked
-			log.Debug().Msg("k8s resolver timer ticked")
-			r.resolves <- nil
-			continue
-		case <-r.resolves:
-			// on resolve requested
-			// de-duplicate requests
-			if time.Since(lastResolved) < time.Second*5 {
-				log.Debug().Msg("k8s resolver update request discarded")
+		case addrs := <-r.results:
+			if StrSliceEqual(addrs, last) {
+				log.Debug().Msg("k8s resolver: addresses no change")
 				continue
 			}
-			lastResolved = time.Now()
-			log.Debug().Msg("k8s resolver update request received")
-			// resolve
-			if addrs, err := r.client.GetAddresses(ctx, r.target); err != nil {
-				log.Error().Err(err).Msg("k8s resolver update request failed")
-				continue
-			} else {
-				log.Debug().Strs("addrs", addrs).Msg("k8s resolver update request succeeded")
-				r.updateAddresses(addrs)
+			log.Debug().Strs("addrs", addrs).Msg("k8s resolver: new addresses")
+			// build grpc state and apply
+			state := resolver.State{}
+			for _, addr := range addrs {
+				state.Addresses = append(state.Addresses, resolver.Address{Addr: addr, Type: resolver.Backend})
 			}
+			r.conn.UpdateState(state)
+			// record last
+			last = addrs
 		case <-ctx.Done():
 			// on closed
 			return
@@ -93,20 +111,12 @@ func (r *Resolver) run(ctx context.Context) {
 	}
 }
 
-func (r *Resolver) updateAddresses(addrs []string) {
-	state := resolver.State{}
-	for _, addr := range addrs {
-		state.Addresses = append(state.Addresses, resolver.Address{Addr: addr, Type: resolver.Backend})
-	}
-	r.conn.UpdateState(state)
-}
-
 func (r *Resolver) resolveNow() {
 	r.resolves <- nil
 }
 
 func (r *Resolver) ResolveNow(opt resolver.ResolveNowOption) {
-	log.Debug().Interface("opt", opt).Msg("gRPC asked for resolving now")
+	log.Debug().Interface("opt", opt).Msg("k8s resolver: gRPC asked for resolving now")
 	go r.resolveNow()
 }
 

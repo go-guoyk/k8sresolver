@@ -125,15 +125,21 @@ func (c *Client) watchAddresses(ctx context.Context, target Target, output chan 
 		if addrs, err = endpointsToAddresses(*ep, target); err != nil {
 			return
 		}
-		output <- addrs
+		// prevent blocking
+		select {
+		case output <- addrs:
+			continue
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 
-func (c *Client) WatchAddress(ctx context.Context, target Target, output chan []string, errs chan error) {
+func (c *Client) WatchAddress(ctx context.Context, target Target, output chan []string) {
 	for {
 		if err := c.watchAddresses(ctx, target, output); err != nil {
 			if err != context.Canceled && err != context.DeadlineExceeded {
-				errs <- err
+				log.Error().Err(err).Msg("kubernetes: failed to watch endpoints")
 				time.Sleep(time.Second)
 			}
 		}
