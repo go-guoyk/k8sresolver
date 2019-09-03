@@ -49,17 +49,15 @@ func (r *Resolver) runPeriodicResolve(ctx context.Context) {
 	tk := time.NewTicker(RefreshInterval)
 	defer tk.Stop()
 
-	go func() {
-		for {
-			select {
-			case <-tk.C:
-				log.Debug().Msg("k8s resolver: timer ticked")
-				r.resolveNow()
-			case <-ctx.Done():
-				return
-			}
+	for {
+		select {
+		case <-tk.C:
+			log.Debug().Msg("k8s resolver: timer ticked")
+			r.resolveNow()
+		case <-ctx.Done():
+			return
 		}
-	}()
+	}
 }
 
 func (r *Resolver) runResolveExecutor(ctx context.Context) {
@@ -74,14 +72,14 @@ func (r *Resolver) runResolveExecutor(ctx context.Context) {
 	})
 }
 
-func (r *Resolver) runWatch(ctx context.Context) {
+func (r *Resolver) runAdjectiveResolve(ctx context.Context) {
 	r.client.WatchAddress(ctx, r.target, r.results)
 }
 
 func (r *Resolver) run(ctx context.Context) {
-	go r.runPeriodicResolve(ctx)
 	go r.runResolveExecutor(ctx)
-	go r.runWatch(ctx)
+	go r.runPeriodicResolve(ctx)
+	go r.runAdjectiveResolve(ctx)
 
 	// initial resolve
 	r.resolveNow()
@@ -91,7 +89,7 @@ func (r *Resolver) run(ctx context.Context) {
 	for {
 		select {
 		case addrs := <-r.results:
-			if StrSliceEqual(addrs, last) {
+			if strSliceEqual(addrs, last) {
 				log.Debug().Msg("k8s resolver: addresses no change")
 				continue
 			}

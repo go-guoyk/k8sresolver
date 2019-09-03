@@ -4,7 +4,7 @@ import (
 	"context"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	_ "go.guoyk.net/k8sresolver"
+	"go.guoyk.net/k8sresolver"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"os"
@@ -12,6 +12,7 @@ import (
 )
 
 func main() {
+	k8sresolver.RefreshInterval = time.Second * 10
 	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdin})
 

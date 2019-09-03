@@ -6,24 +6,25 @@ import (
 )
 
 func debounce(ctx context.Context, dur time.Duration, in chan interface{}, cb func()) {
-	update := false
-	timer := time.NewTimer(dur)
+	// create a stopped timer
+	t := time.NewTimer(0)
+	if !t.Stop() {
+		<-t.C
+	}
+	// the debounce loop
 	for {
 		select {
 		case _ = <-in:
-			update = true
-			timer.Reset(dur)
-		case <-timer.C:
-			if update {
-				cb()
-			}
+			t.Reset(dur)
+		case <-t.C:
+			cb()
 		case <-ctx.Done():
 			return
 		}
 	}
 }
 
-func StrSliceEqual(strs1 []string, strs2 []string) bool {
+func strSliceEqual(strs1 []string, strs2 []string) bool {
 	if len(strs1) != len(strs2) {
 		return false
 	}
