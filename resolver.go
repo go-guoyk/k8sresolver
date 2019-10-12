@@ -72,14 +72,14 @@ func (r *Resolver) runResolveExecutor(ctx context.Context) {
 	})
 }
 
-func (r *Resolver) runAdjectiveResolve(ctx context.Context) {
+func (r *Resolver) runPassiveResolve(ctx context.Context) {
 	r.client.WatchAddress(ctx, r.target, r.results)
 }
 
 func (r *Resolver) run(ctx context.Context) {
 	go r.runResolveExecutor(ctx)
 	go r.runPeriodicResolve(ctx)
-	go r.runAdjectiveResolve(ctx)
+	go r.runPassiveResolve(ctx)
 
 	// initial resolve
 	r.resolveNow()
