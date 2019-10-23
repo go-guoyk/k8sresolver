@@ -1,4 +1,4 @@
-package k8sresolver
+package k8s
 
 import (
 	"context"
@@ -18,27 +18,6 @@ var (
 	defaultClientError error
 	defaultClientOnce  = &sync.Once{}
 )
-
-type Target struct {
-	Service     string
-	Namespace   string
-	Port        string
-	PortIsName  bool
-	PortIsFirst bool
-}
-
-func (t Target) String() string {
-	if t.PortIsFirst {
-		return t.Service + "." + t.Namespace
-	} else {
-		return t.Service + "." + t.Namespace + ":" + t.Port
-	}
-}
-
-type AddressesUpdate struct {
-	Addrs []string
-	Err   error
-}
 
 func endpointsToAddresses(ep v1.Endpoints, target Target) (addrs []string, err error) {
 	for _, sub := range ep.GetSubsets() {
@@ -73,7 +52,7 @@ type Client struct {
 	client *k8s.Client
 }
 
-func NewClient() (client *Client, err error) {
+func newClient() (client *Client, err error) {
 	var kc *k8s.Client
 	if kc, err = k8s.NewInClusterClient(); err != nil {
 		return
@@ -84,7 +63,7 @@ func NewClient() (client *Client, err error) {
 
 func GetClient() (*Client, error) {
 	defaultClientOnce.Do(func() {
-		defaultClient, defaultClientError = NewClient()
+		defaultClient, defaultClientError = newClient()
 	})
 	return defaultClient, defaultClientError
 }

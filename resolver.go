@@ -3,27 +3,28 @@ package k8sresolver
 import (
 	"context"
 	"github.com/rs/zerolog/log"
+	"go.guoyk.net/k8sresolver/pkg/k8s"
 	"google.golang.org/grpc/resolver"
 	"time"
 )
 
 var (
-	// RefreshInterval adjective refresh interval
+	// RefreshInterval periodic refresh interval
 	RefreshInterval = time.Minute
 )
 
 type Resolver struct {
-	target Target
+	target k8s.Target
 	conn   resolver.ClientConn
 	opt    resolver.BuildOption
-	client *Client
+	client *k8s.Client
 
 	cancel   context.CancelFunc
 	resolves chan interface{}
 	results  chan []string
 }
 
-func NewResolver(target Target, cc resolver.ClientConn, opts resolver.BuildOption, client *Client) *Resolver {
+func NewResolver(target k8s.Target, cc resolver.ClientConn, opts resolver.BuildOption, client *k8s.Client) *Resolver {
 	r := &Resolver{
 		target:   target,
 		conn:     cc,

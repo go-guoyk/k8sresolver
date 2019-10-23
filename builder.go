@@ -2,6 +2,7 @@ package k8sresolver
 
 import (
 	"fmt"
+	"go.guoyk.net/k8sresolver/pkg/k8s"
 	"google.golang.org/grpc/resolver"
 	"net"
 	"strconv"
@@ -17,12 +18,12 @@ type Builder struct {
 
 func (k *Builder) Build(target resolver.Target, cc resolver.ClientConn, opts resolver.BuildOption) (resolver.Resolver, error) {
 	var err error
-	var client *Client
-	if client, err = GetClient(); err != nil {
+	var client *k8s.Client
+	if client, err = k8s.GetClient(); err != nil {
 		return nil, err
 	}
-	var tgt Target
-	if tgt, err = ResolveTarget(target.Authority, target.Endpoint, client.GetNamespace()); err != nil {
+	var tgt k8s.Target
+	if tgt, err = parseTarget(target.Authority, target.Endpoint, client.GetNamespace()); err != nil {
 		return nil, err
 	}
 	r := NewResolver(tgt, cc, opts, client)
@@ -34,24 +35,24 @@ func (k *Builder) Scheme() string {
 	return "k8s"
 }
 
-func ResolveTarget(srcAuthority string, srcEndpoint string, currentNamespace string) (Target, error) {
-	// k8s://default/service:port
+func parseTarget(srcAuthority string, srcEndpoint string, currentNamespace string) (k8s.Target, error) {
+	// k8s:///default/service:port
 	ep := srcEndpoint
 	sNS := srcAuthority
-	// k8s://service.default:port/
+	// k8s:///service.default:port/
 	if ep == "" {
 		ep = srcAuthority
 		sNS = currentNamespace
 	}
 	// k8s:///service:port
-	// k8s://service:port/
+	// k8s:///service:port/
 	if sNS == "" {
 		sNS = currentNamespace
 	}
 
-	out := Target{}
+	out := k8s.Target{}
 	if ep == "" {
-		return Target{}, fmt.Errorf("target(%s/%s) is empty", srcAuthority, srcEndpoint)
+		return k8s.Target{}, fmt.Errorf("target(%s/%s) is empty", srcAuthority, srcEndpoint)
 	}
 	var name string
 	var port string
@@ -63,7 +64,7 @@ func ResolveTarget(srcAuthority string, srcEndpoint string, currentNamespace str
 		var err error
 		name, port, err = net.SplitHostPort(ep)
 		if err != nil {
-			return Target{}, fmt.Errorf("target endpoint='%s' is invalid. grpc target is %s/%s, err=%v", ep, srcAuthority, srcEndpoint, err)
+			return k8s.Target{}, fmt.Errorf("target endpoint='%s' is invalid. grpc target is %s/%s, err=%v", ep, srcAuthority, srcEndpoint, err)
 		}
 	}
 
