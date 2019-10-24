@@ -17,23 +17,24 @@ func TestDebounce(t *testing.T) {
 	go debounce(ctx, time.Second, requests, func() { val++ })
 
 	requests <- nil
+	requests <- nil
 	time.Sleep(time.Millisecond * 900)
-	assert.Equal(t, 0, val, "should not increase")
+	assert.Equal(t, 1, val, "should not increase")
 
 	requests <- nil
 	time.Sleep(time.Millisecond * 900)
-	assert.Equal(t, 0, val, "should not increase")
+	assert.Equal(t, 1, val, "should not increase")
 
 	requests <- nil
 	time.Sleep(time.Millisecond * 900)
-	assert.Equal(t, 0, val, "should not increase")
+	assert.Equal(t, 1, val, "should not increase")
 
 	requests <- nil
 	time.Sleep(time.Millisecond * 1100)
-	assert.Equal(t, 1, val, "should increase")
+	assert.Equal(t, 2, val, "should increase")
 
 	time.Sleep(time.Millisecond * 1100)
-	assert.Equal(t, 1, val, "should not increase again")
+	assert.Equal(t, 2, val, "should not increase again")
 }
 
 func TestSliceStrEqual(t *testing.T) {

@@ -6,83 +6,52 @@ import (
 	"github.com/ericchiang/k8s"
 	v1 "github.com/ericchiang/k8s/apis/core/v1"
 	"github.com/rs/zerolog/log"
-	"net"
-	"sort"
-	"strconv"
 	"sync"
 	"time"
 )
 
 var (
-	defaultClient      *Client
+	defaultClient      *client
 	defaultClientError error
 	defaultClientOnce  = &sync.Once{}
 )
 
-func endpointsToAddresses(ep v1.Endpoints, target Target) (addrs []string, err error) {
-	for _, sub := range ep.GetSubsets() {
-		// resolve port
-		var resolvedPort string
-		if target.PortIsFirst || target.PortIsName {
-			for _, p := range sub.GetPorts() {
-				if (target.PortIsFirst || p.GetName() == target.Port) &&
-					(p.GetProtocol() == "TCP" || p.GetProtocol() == "") {
-					resolvedPort = strconv.Itoa(int(p.GetPort()))
-					break
-				}
-			}
-			if len(resolvedPort) == 0 {
-				err = fmt.Errorf("failed to resolve port, name=%s, first=%t", target.Port, target.PortIsFirst)
-				return
-			}
-		} else {
-			resolvedPort = target.Port
-		}
-		// add addresses
-		for _, addr := range sub.Addresses {
-			addrs = append(addrs, net.JoinHostPort(addr.GetIp(), resolvedPort))
-		}
-	}
-	// sort strings for better LB
-	sort.Strings(addrs)
-	return
+type Client interface {
+	GetNamespace() string
+	GetAddresses(ctx context.Context, target Target) ([]string, error)
+	WatchAddress(ctx context.Context, target Target, output chan []string)
 }
 
-type Client struct {
+type client struct {
 	client *k8s.Client
 }
 
-func newClient() (client *Client, err error) {
-	var kc *k8s.Client
-	if kc, err = k8s.NewInClusterClient(); err != nil {
-		return
-	}
-	client = &Client{client: kc}
-	return
-}
-
-func GetClient() (*Client, error) {
+func GetClient() (Client, error) {
 	defaultClientOnce.Do(func() {
-		defaultClient, defaultClientError = newClient()
+		var kc *k8s.Client
+		if kc, defaultClientError = k8s.NewInClusterClient(); defaultClientError != nil {
+			return
+		}
+		defaultClient = &client{client: kc}
 	})
 	return defaultClient, defaultClientError
 }
 
-func (c *Client) GetNamespace() string {
+func (c *client) GetNamespace() string {
 	return c.client.Namespace
 }
 
-func (c *Client) GetAddresses(ctx context.Context, target Target) ([]string, error) {
+func (c *client) GetAddresses(ctx context.Context, target Target) ([]string, error) {
 	var ep v1.Endpoints
 
 	if err := c.client.Get(ctx, target.Namespace, target.Service, &ep); err != nil {
 		return nil, err
 	}
 
-	return endpointsToAddresses(ep, target)
+	return target.ResolveEndpoints(ep)
 }
 
-func (c *Client) watchAddresses(ctx context.Context, target Target, output chan []string) (err error) {
+func (c *client) watchAddresses(ctx context.Context, target Target, output chan []string) (err error) {
 	var watcher *k8s.Watcher
 	if watcher, err = c.client.Watch(
 		ctx,
@@ -101,7 +70,7 @@ func (c *Client) watchAddresses(ctx context.Context, target Target, output chan 
 		}
 		log.Debug().Str("event", event).Interface("endpoints", ep.Subsets).Msg("k8s client event received")
 		var addrs []string
-		if addrs, err = endpointsToAddresses(*ep, target); err != nil {
+		if addrs, err = target.ResolveEndpoints(*ep); err != nil {
 			return
 		}
 		// prevent blocking
@@ -114,7 +83,7 @@ func (c *Client) watchAddresses(ctx context.Context, target Target, output chan 
 	}
 }
 
-func (c *Client) WatchAddress(ctx context.Context, target Target, output chan []string) {
+func (c *client) WatchAddress(ctx context.Context, target Target, output chan []string) {
 	for {
 		if err := c.watchAddresses(ctx, target, output); err != nil {
 			if err != context.Canceled && err != context.DeadlineExceeded {

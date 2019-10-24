@@ -11,24 +11,25 @@ import (
 var (
 	// RefreshInterval periodic refresh interval
 	RefreshInterval = time.Minute
+
+	// DebounceInterval debounce interval
+	DebounceInterval = time.Second * 3
 )
 
 type Resolver struct {
 	target k8s.Target
 	conn   resolver.ClientConn
-	opt    resolver.BuildOption
-	client *k8s.Client
+	client k8s.Client
 
 	cancel   context.CancelFunc
 	resolves chan interface{}
 	results  chan []string
 }
 
-func NewResolver(target k8s.Target, cc resolver.ClientConn, opts resolver.BuildOption, client *k8s.Client) *Resolver {
+func NewResolver(target k8s.Target, cc resolver.ClientConn, _ resolver.BuildOption, client k8s.Client) *Resolver {
 	r := &Resolver{
 		target:   target,
 		conn:     cc,
-		opt:      opts,
 		client:   client,
 		resolves: make(chan interface{}, 1),
 		results:  make(chan []string, 1),
@@ -62,7 +63,7 @@ func (r *Resolver) runPeriodicResolve(ctx context.Context) {
 }
 
 func (r *Resolver) runResolveExecutor(ctx context.Context) {
-	debounce(ctx, time.Second*3, r.resolves, func() {
+	debounce(ctx, DebounceInterval, r.resolves, func() {
 		if addrs, err := r.client.GetAddresses(ctx, r.target); err != nil {
 			log.Error().Err(err).Msg("k8s resolver: update request failed")
 			return

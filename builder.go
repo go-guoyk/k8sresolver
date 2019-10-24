@@ -18,7 +18,7 @@ type Builder struct {
 
 func (k *Builder) Build(target resolver.Target, cc resolver.ClientConn, opts resolver.BuildOption) (resolver.Resolver, error) {
 	var err error
-	var client *k8s.Client
+	var client k8s.Client
 	if client, err = k8s.GetClient(); err != nil {
 		return nil, err
 	}

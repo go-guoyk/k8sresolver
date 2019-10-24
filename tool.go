@@ -6,6 +6,13 @@ import (
 )
 
 func debounce(ctx context.Context, dur time.Duration, in chan interface{}, cb func()) {
+	// first invocation is not debounced
+	select {
+	case <-ctx.Done():
+		return
+	case <-in:
+		cb()
+	}
 	// create a stopped timer
 	t := time.NewTimer(0)
 	if !t.Stop() {
