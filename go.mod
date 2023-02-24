@@ -7,6 +7,6 @@ require (
 	github.com/golang/protobuf v1.3.2 // indirect
 	github.com/rs/zerolog v1.15.0
 	github.com/stretchr/testify v1.4.0
-	golang.org/x/net v0.0.0-20190404232315-eb5bcb51f2a3
+	golang.org/x/net v0.7.0
 	google.golang.org/grpc v1.23.0
 )
